@@ -1,0 +1,309 @@
+---
+title: "Seattle Pets Exploratory Data Analysis"
+author: "Rebecca Hadi"
+date: "3/30/2018"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+#load packages 
+library(tidyverse) #tidyverse 
+library(ggmap) #map 
+library(zipcode) #transform zip to lat long
+library(magrittr)
+library(evaluate)
+```
+
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+#set wd and load data 
+setwd("~/Documents/personal_git_repo/seattle-pets/")
+pets <- read.csv("seattle-pet-licenses/seattle_pet_licenses.csv")
+```
+
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+
+#summary of data 
+head(pets)
+str(pets)
+summary(pets)  
+#animal name is missing ~ 2%  of animals 
+#license # is missng some (not a useful field)
+
+```
+
+## Background 
+
+While browsing for some data to play with, I stumbled across a data set that contained pet licenses for the city of Seattle.  The data set can be found at https://www.kaggle.com/aaronschlegel/seattle-pet-licenses/data. Since I own (or rather, have a mutually beneficial relationship with) a 14-year old tuxedo cat named Jinx, I thought it would be fun to explore this data set.  
+
+```{r, out.width = "200px", fig.align= "center", fig.cap = "This is my cat, Jinx.", echo = FALSE}
+knitr::include_graphics("/Users/bt0x/Documents/pictures/jinx copy.jpg")
+```
+
+
+**Caveat:**  With any data found on the web, it is important to consider its method of collection and if there are any limitations/biases in the data set.  Here, we are working with data from Kaggle, which says it's been gathered as part of the city's "Open Data Initiative".  Any conclusions/observations from this analysis are specific to this data set and should not be extrapolated.  The exploratory data analysis will likely shed more light on any limitations with the data set, but it's possible that there is bias within: (1) what data are included and/or (2) what proportion of pets in Seattle *are not* licensed and would therefore not be included in the data set (3) other things I'm not considering.  Herein, any time I make a reference to "in Seattle", what I really mean is "in this Seattle data set which may or may not be representative". With that being said, we are only as good as what we can measure, and I'm sure there are learnings from this data set! 
+
+
+## How much data are we working with?
+
+When approaching a data set, I find that it's valuable to actually inspect the ranges of the data of which I'm working. While this is fairly intuitive, it is surprising that it's easy to miss something that could impact your analysis that would have been solved by a simple inspection of data data. An example of this that I frequently encounter professionally is dealing with NULL values, meaning, you get a data set, see the field you need, only to discover it's only populated for 30% of records. 
+
+
+In R, when working with a new data set, I run three statements right off the bat (assuming df is my data frame. 
+
+* head (df) 
+
+* summary (df) 
+
+* str (df)
+
+I won't show the results in this output, but this led me to observe that I have data going back to 2005. Nice! If I didn't go any further, my natural assumption would be that I have complete data over that time period. Let's see if that's true. 
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+#How do pet counts vary over time? 
+
+#need to get year 
+pets$license_issue_date <- as.Date(as.character(pets$license_issue_date))
+pets$license_issue_year <- format(as.Date(pets$license_issue_date, format= "%Y/%m/%d"), "%Y")
+
+
+#pets over time
+ggplot(data = pets, aes(x = license_issue_year, fill = species)) + 
+      geom_bar(stat = "count") + 
+      theme_classic() + 
+      labs(x = "License Year", y = "Pet Count") + 
+      ggtitle("Pets in Seattle by Species over Time")
+
+
+#Count pets by year 
+pets.tbl <- pets %>% 
+            group_by(license_issue_year) %>% 
+            summarise(count = n())
+
+
+```
+
+In the chart above, we see that the data from 2005 to 2012 is almost non-existent. It slowly picks up over 2013-2014, then a massive spike in 2015.  It seems like there is some bias with the data collection, as it is unlikely there were minimal in Seattle until 2015. It's possible that only a minimal number of pets were *licensed* until 2015, but that also seems unlikely. I suppose we could do a bit of research to find out when Seattle started licensing or enforcing licensing of pets, but for the purpose of this analysis, I'm going to consider that this data set captures recent licensing behavior.   It's difficult for me to evaluate if there were truly more pets licensed in 2016 vs. 2015, or if the data collection was better in 2016.  I think the conclusion I'm going to work with is that this data set is not well suited to analyze trends. Nothing wrong with accepting limitations of your data set! 
+
+From this view, we can also see that the majority of the pets licensed in Seattle are dogs.  Overall, `r round(nrow(filter(pets, species == "Dog")) / nrow(pets) * 100,0)` $\%$ of pets in the data set are dogs.  The table below shows the counts and proportions for the data set. 
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+#aggregate count by species
+pets.summary <- pets %>% 
+                group_by(species) %>% 
+                summarise(count = n())
+
+#convert to df
+pets.summary <- as.data.frame(pets.summary)
+
+#add pct total 
+pets.summary$pct_total <- round(pets.summary$count / sum(pets.summary$count) * 100,0)
+
+
+#display as table 
+knitr::kable(pets.summary)
+```
+
+
+
+
+##Spatial Analysis 
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+#create base map
+seattle.toner <- get_map(location = "seattle", maptype = "toner", zoom = 10)
+
+
+
+#bring zipcode data in memory  
+data(zipcode)
+
+
+#find out which zips drop out? 
+pets.drop <- anti_join(pets, zipcode, by = c("zip_code" = "zip"))
+
+#<1 % of records drop out due to zip code. The reasons are either due to missing value, error in entry (<5 char length or not in Seattle), or appears to have additional 4 values.  The additional 4 values at the end of the zip code is easy to handle, but the data set is large enough (~66K records) to exclude the other failures 
+
+#clean up zip code for those that have additional 4 values 
+pets$zip_code <- substring(pets$zip_code, 1, 5)
+
+
+#join against pets df 
+pets.zip <- inner_join(pets, zipcode, by = c("zip_code" = "zip"))
+
+
+#summarize how many records we mapped to zip out of how many we started with 
+pct_zip <- nrow(pets.zip) / nrow(pets)
+
+#Manipulate data frame to aggregate by lat long & species 
+
+pets.zip.aggregate <- pets.zip %>% 
+                      group_by(latitude, longitude, species) %>% 
+                      summarise(count = n())
+  
+
+#add pets data to ggmap 
+ggmap(seattle.toner) + 
+      geom_point(data = filter(pets.zip.aggregate, species != "Livestock"), aes(x = longitude, y = latitude, size = count, color = count), alpha = 0.5) + 
+      scale_color_gradient(low = "blue", high = "red") + 
+      ggtitle("Total Pets in Seattle") + 
+   #  scale_x_continuous(limits = c(-122.4,-122.2)) + 
+   #  scale_y_continuous(limits = c(47.4,47.9)) + 
+   #  coord_cartesian() +
+      facet_wrap (~species) + 
+     #remove axes
+      theme(axis.title.x = element_blank(), 
+            axis.text.x = element_blank(),
+            axis.ticks.x = element_blank(), 
+            axis.title.y = element_blank(), 
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank())
+
+
+#filter on cats only
+ggmap(seattle.toner) + 
+      geom_point(data = filter(pets.zip.aggregate, species == "Cat"), 
+      aes(x = longitude, y = latitude, color = count, size = count), alpha = 0.5) + 
+      scale_color_gradient(low = "blue", high = "red") + 
+      ggtitle("Cats in Seattle") + 
+       #remove axes
+      theme(axis.title.x = element_blank(), 
+            axis.text.x = element_blank(),
+            axis.ticks.x = element_blank(), 
+            axis.title.y = element_blank(), 
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank())
+
+
+#filter on dogs
+ggmap(seattle.toner) + 
+      geom_point(data = filter(pets.zip.aggregate, species == "Dog"), 
+      aes(x = longitude, y = latitude, color = count, size = count), alpha = 0.5) + 
+      scale_color_gradient(low = "blue", high = "red") +
+      ggtitle("Dogs in Seattle") + 
+      #remove axes
+      theme(axis.title.x = element_blank(), 
+            axis.text.x = element_blank(),
+            axis.ticks.x = element_blank(), 
+            axis.title.y = element_blank(), 
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank())
+  
+```
+
+After some minor cleanup of the zip code data, I'm able to match `r round(pct_zip * 100,0)`$\%$ of records to a zip code in Seattle. Upon inspection, some zip codes were not in Seattle (presumably an error) or were not 5 digits long. Some zip codes were initially 9 digits (5 digit zip + 4 digit suffix). I was able to use a sub-string function to remove the last 4 digits to enable the join against the zip package.
+
+Based on these maps, we observe that there is not much of a difference in the concentration of cats compared to dogs. With this data set, it is difficult to discern if there are truly more dogs than cats or if there is some inherit bias with the pets that end up being licensed. 
+
+It appears that the highest concentration of pets is located in the North Seattle area.  
+
+## What's in a name? 
+
+This data set contained pet names which I found to be an entertaining data point.  It enables us to answer the questions such as "What's the most popular dog/cat name in Seattle?" or "Is there any overlap between dog and cat names?"
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+#what's the most common pet name? 
+pet.names <-   pets %>% 
+               group_by(animal_s_name) %>% 
+               summarise(count = n())
+
+#group by species
+pet.names.species <-   pets %>% 
+                       group_by(animal_s_name, species) %>% 
+                       summarise(count = n())
+
+
+#alter column names
+colnames(pet.names) <- c("animal_s_name","total")
+colnames(pet.names.species) <- c("animal_s_name","species","total")
+
+
+#order by count
+pet.names <- pet.names[order(-pet.names$total),]
+
+#order by count
+pet.names.species <- pet.names.species[order(-pet.names.species$total),]
+
+
+#plot
+ggplot(data = pet.names[2:30,], aes(x = reorder(animal_s_name,total), y = total)) + 
+      geom_bar(stat = "identity") + 
+      coord_flip() + 
+      theme_classic() + 
+      labs(x = "Pet Name", y = "Pet Count") + 
+      ggtitle("Most Popular Pet Names (All Species)")
+
+
+#pet names filter 
+pet.names.filter <- pet.names[2:30,]
+
+
+topnames.species <- inner_join(pet.names.filter, pet.names.species, by = "animal_s_name")
+
+
+
+#plot by animal based on total names
+ggplot(data = topnames.species, aes(x = reorder(animal_s_name,total.x), y = total.y)) + 
+      geom_bar(stat = "identity") + 
+      coord_flip() + 
+      theme_classic() +
+      facet_wrap(~species) + 
+      labs(x = "Pet Name", y = "Pet Count") + 
+      ggtitle("Most Popular Names by Species")
+
+
+#what are the most popular cat names 
+pet.names.cat <- pet.names.species %>% 
+                 filter(species == "Cat")
+
+#what are the most popular cat names 
+pet.names.dog <- pet.names.species %>% 
+                 filter(species == "Dog")
+
+
+
+#cat
+ggplot(data = pet.names.cat[2:30,], aes(x = reorder(animal_s_name,total), y = total)) + 
+      geom_bar(stat = "identity") + 
+      coord_flip() + 
+      theme_classic() + 
+      labs( x = "Pet Name", y = "Pet Count") + 
+      ggtitle("Most Popular Cat Names")
+
+
+#dog
+ggplot(data = pet.names.dog[2:30,], aes(x = reorder(animal_s_name,total), y = total)) + 
+      geom_bar(stat = "identity") +
+      theme_classic() + 
+      coord_flip() +
+      labs( x = "Pet Name", y = "Pet Count") + 
+      ggtitle("Most Popular Dog Names")
+
+```
+
+Let's see what we've learned!
+
+* The most popular names overall are Lucy, Bella, and Charlie. 
+* Lucy is a common name for both dogs and cats. 
+* Lucy, Max, and Luna are the most popular cat names. 
+* Charlie, Bella, and Daisy are the most popular dog names. 
+
+## Conclusion
+
+We've done some high level exploration of our data set including: 
+
+* What's the range of data available?
+
+* Where are pets concentrated in Seattle and does this vary?
+
+* What are the most common pet names? 
+
+*That's all for now!*
+
