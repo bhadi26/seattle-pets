@@ -15,6 +15,7 @@ library(ggmap) #map
 library(zipcode) #transform zip to lat long
 library(magrittr)
 library(evaluate)
+
 ```
 
 
