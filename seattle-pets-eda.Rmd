@@ -1,7 +1,7 @@
 ---
 title: "Seattle Pets Exploratory Data Analysis"
 author: "Rebecca Hadi"
-date: "3/30/2018"
+date: "4/26/2018"
 output:
   html_document:
     df_print: paged
@@ -88,7 +88,7 @@ pets.tbl <- pets %>%
 
 ```
 
-In the chart above, we see that the data from 2005 to 2012 is almost non-existent. It slowly picks up over 2013-2014, then a massive spike in 2015.  It seems like there is some bias with the data collection, as it is unlikely there were minimal in Seattle until 2015. It's possible that only a minimal number of pets were *licensed* until 2015, but that also seems unlikely. I suppose we could do a bit of research to find out when Seattle started licensing or enforcing licensing of pets, but for the purpose of this analysis, I'm going to consider that this data set captures recent licensing behavior.   It's difficult for me to evaluate if there were truly more pets licensed in 2016 vs. 2015, or if the data collection was better in 2016.  I think the conclusion I'm going to work with is that this data set is not well suited to analyze trends. Nothing wrong with accepting limitations of your data set! 
+In the chart above, we see that the data from 2005 to 2012 is almost non-existent. It slowly picks up over 2013-2014, then a massive spike in 2015.  It seems like there is some bias with the data collection, as it is unlikely there were minimal pets in Seattle until 2015. It's possible that only a minimal number of pets were *licensed* until 2015, but that also seems unlikely. I suppose we could do a bit of research to find out when Seattle started licensing or enforcing licensing of pets, but for the purpose of this analysis, I'm going to consider that this data set captures recent licensing behavior.   It's difficult for me to evaluate if there were truly more pets licensed in 2016 vs. 2015, or if the data collection was better in 2016.  I think the conclusion I'm going to work with is that this data set is not well suited to analyze trends. Nothing wrong with accepting limitations of your data set! 
 
 From this view, we can also see that the majority of the pets licensed in Seattle are dogs.  Overall, `r round(nrow(filter(pets, species == "Dog")) / nrow(pets) * 100,0)` $\%$ of pets in the data set are dogs.  The table below shows the counts and proportions for the data set. 
 
